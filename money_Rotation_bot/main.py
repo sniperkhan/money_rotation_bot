@@ -33,7 +33,7 @@ if is_key_used_by_another_user(user_key, TELEGRAM_CHAT_ID):
 
 # ✅ Auto activate key (if not already activated)
 if not user_data.get("used"):
-    activate_key(user_key, TELEGRAM_CHAT_ID)
+    activate_key(user_key, TELEGRAM_CHAT_ID, TELEGRAM_TOKEN)
     print("✅ Key successfully activated & expiry set.")
 
 # ✅ Create user folder and created.txt
