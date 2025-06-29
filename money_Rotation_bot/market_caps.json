@@ -1,0 +1,5 @@
+{
+  "Large": ["BNB/USDT", "SOL/USDT", "LINK/USDT"],
+  "Mid": ["INJ/USDT", "RUNE/USDT", "FTM/USDT"],
+  "Small": ["COTI/USDT", "ACH/USDT", "SFP/USDT"]
+}

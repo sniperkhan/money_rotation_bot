@@ -1,0 +1,7 @@
+{
+  "AI": ["FET/USDT", "AGIX/USDT", "NMR/USDT"],
+  "DeFi": ["UNI/USDT", "AAVE/USDT", "SUSHI/USDT"],
+  "Gaming": ["GALA/USDT", "SAND/USDT", "MANA/USDT"],
+  "RWA": ["NXRA/USDT", "CFG/USDT", "POLYX/USDT"],
+  "L1": ["AVAX/USDT", "NEAR/USDT", "OP/USDT"]
+}
