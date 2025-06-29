@@ -22,9 +22,33 @@ if is_key_expired(user_key):
     print(f"🕓 Expired on: {get_key_expiry_date(user_key)}")
     exit()
 
-user_data = get_user_data(user_key)
-TELEGRAM_CHAT_ID = user_data.get("chat_id")
-TELEGRAM_TOKEN = user_data.get("bot_token")
+# 🟡 Ask for bot token only
+print("📥 Please enter your Telegram Bot Token:")
+TELEGRAM_TOKEN = input("➡ Bot Token: ").strip()
+
+# 🔍 Auto detect chat ID
+def get_chat_id(token):
+    import time
+    import requests
+    print("📨 Now send ANY message to your Telegram bot...")
+    for _ in range(10):
+        try:
+            updates = requests.get(f"https://api.telegram.org/bot{token}/getUpdates").json()
+            messages = updates.get("result", [])
+            for msg in reversed(messages):
+                if "message" in msg and "chat" in msg["message"]:
+                    return msg["message"]["chat"]["id"]
+        except Exception as e:
+            print("⏳ Waiting for message...")
+
+        time.sleep(3)
+    return None
+
+TELEGRAM_CHAT_ID = get_chat_id(TELEGRAM_TOKEN)
+
+if not TELEGRAM_CHAT_ID:
+    print("❌ Failed to detect chat ID. Please send a message to your bot and try again.")
+    exit()
 
 # 🚫 Prevent key reuse by another user
 if is_key_used_by_another_user(user_key, TELEGRAM_CHAT_ID):
@@ -32,9 +56,10 @@ if is_key_used_by_another_user(user_key, TELEGRAM_CHAT_ID):
     exit()
 
 # ✅ Auto activate key (if not already activated)
+user_data = get_user_data(user_key)
 if not user_data.get("used"):
     activate_key(user_key, TELEGRAM_CHAT_ID, TELEGRAM_TOKEN)
-    print("✅ Key successfully activated & expiry set.")
+    print(f"✅ Key successfully activated & expiry set for chat_id: {TELEGRAM_CHAT_ID}")
 
 # ✅ Create user folder and created.txt
 import os
