@@ -39,18 +39,34 @@ if not user_data.get("used"):
 # ✅ Create user folder and created.txt
 import os
 from datetime import datetime
+
 FOLDER_NAME = f"bots/{TELEGRAM_CHAT_ID}"
 if not os.path.exists(FOLDER_NAME):
     os.makedirs(FOLDER_NAME)
     with open(os.path.join(FOLDER_NAME, "created.txt"), "w") as f:
         f.write(datetime.now().isoformat())
 
+# ✅ Logging Setup (after folder creation)
+import logging
+from logging.handlers import RotatingFileHandler
+
+log_file_path = os.path.join(FOLDER_NAME, "logs.txt")
+log_handler = RotatingFileHandler(log_file_path, maxBytes=100 * 1024, backupCount=1)
+log_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+log_handler.setFormatter(log_formatter)
+
+logging.basicConfig(
+    level=logging.INFO,
+    handlers=[log_handler, logging.StreamHandler()]
+)
+log = logging.getLogger()
+
 # ⌛ Expiry system for bot
 import requests
 from expiry_manager import is_expired, get_expiry_date
 expiry = get_expiry_date()
 if not expiry or is_expired(expiry):
-    print("❌ Bot expired. Please renew your subscription.")
+    log.error("❌ Bot expired. Please renew your subscription.")
     exit()
 
 # 🧠 Bot core logic imports
@@ -73,9 +89,9 @@ def send_telegram_message(message):
     try:
         response = requests.post(url, json=payload)
         if response.status_code != 200:
-            print(f"Telegram error: {response.text}")
+            log.error(f"Telegram error: {response.text}")
     except Exception as e:
-        print(f"Telegram send failed: {e}")
+        log.error(f"Telegram send failed: {e}")
 
 # 🔔 Confirmation message after activation
 send_telegram_message("✅ Bot activated successfully!\nNow scanning for trade setups...")
@@ -85,7 +101,7 @@ import time
 
 def main():
     while True:
-        print("🔁 Checking market...")
+        log.info("🔁 Checking market...")
         sector, sector_coins = detect_rotating_sector()
         cap = detect_market_cap_rotation()
         btc_df = fetch_ohlcv("BTC/USDT", '4h', 100)
@@ -102,11 +118,12 @@ def main():
             if msg:
                 send_telegram_message(msg)
                 mark_sent(symbol, TELEGRAM_CHAT_ID)
+                log.info(f"✅ Signal sent: {symbol}")
                 time.sleep(2)
             else:
-                print(f"[⛔] No valid setup for {symbol}")
+                log.info(f"[⛔] No valid setup for {symbol}")
 
-        print("✅ Cycle complete. Sleeping 15 mins...\n")
+        log.info("✅ Cycle complete. Sleeping 15 mins...\n")
         time.sleep(900)
 
 if __name__ == "__main__":
