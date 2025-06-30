@@ -1,15 +1,15 @@
-# ✅ Auto delete old folders (MUST RUN FIRST)
+# ✅ Auto delete expired bot folders
 from auto_delete_manager import delete_old_folders
 delete_old_folders()
 
-# 📦 Import key system
+# ✅ Key management system
 from key_manager import (
     is_valid_key, get_user_data,
     is_key_expired, get_key_expiry_date,
     activate_key, is_key_used_by_another_user
 )
 
-# 🟡 STEP: USER ACTIVATION
+# 🔐 STEP 1: User Activation
 print("🔐 Please enter your activation key:")
 user_key = input("➡ Key: ").strip()
 
@@ -17,112 +17,94 @@ if not is_valid_key(user_key):
     print("❌ Invalid key. Please contact support.")
     exit()
 
-if is_key_expired(user_key):
-    print("❌ Your key has expired. Please renew your subscription.")
-    print(f"🕓 Expired on: {get_key_expiry_date(user_key)}")
-    exit()
-
-# 🟡 Ask for bot token only
 print("📥 Please enter your Telegram Bot Token:")
-TELEGRAM_TOKEN = input("➡ Bot Token: ").strip()
+bot_token = input("➡ Bot Token: ").strip()
 
-# 🔍 Auto detect chat ID
-def get_chat_id(token):
-    import time
-    import requests
-    print("📨 Now send ANY message to your Telegram bot...")
-    for _ in range(10):
-        try:
-            updates = requests.get(f"https://api.telegram.org/bot{token}/getUpdates").json()
-            messages = updates.get("result", [])
-            for msg in reversed(messages):
-                if "message" in msg and "chat" in msg["message"]:
-                    return msg["message"]["chat"]["id"]
-        except Exception as e:
-            print("⏳ Waiting for message...")
+# 🕵 STEP 2: Detect Chat ID (by asking user to message the bot)
+import time, requests
 
-        time.sleep(3)
-    return None
+print("📨 Now send ANY message to your Telegram bot...")
+chat_id = None
+for _ in range(30):  # Try for ~30 seconds
+    time.sleep(1)
+    try:
+        updates = requests.get(f"https://api.telegram.org/bot{bot_token}/getUpdates").json()
+        messages = updates.get("result", [])
+        for msg in reversed(messages):
+            if "message" in msg:
+                chat_id = msg["message"]["chat"]["id"]
+                break
+        if chat_id:
+            break
+    except Exception:
+        pass
 
-TELEGRAM_CHAT_ID = get_chat_id(TELEGRAM_TOKEN)
-
-if not TELEGRAM_CHAT_ID:
+if not chat_id:
     print("❌ Failed to detect chat ID. Please send a message to your bot and try again.")
     exit()
 
-# 🚫 Prevent key reuse by another user
-if is_key_used_by_another_user(user_key, TELEGRAM_CHAT_ID):
+chat_id = str(chat_id)
+
+# 🚫 Check misuse
+if is_key_used_by_another_user(user_key, chat_id):
     print("🚫 This key is already in use by another user.")
     exit()
 
-# ✅ Auto activate key (if not already activated)
-user_data = get_user_data(user_key)
-if not user_data.get("used"):
-    activate_key(user_key, TELEGRAM_CHAT_ID, TELEGRAM_TOKEN)
-    print(f"✅ Key successfully activated & expiry set for chat_id: {TELEGRAM_CHAT_ID}")
+if is_key_expired(user_key):
+    print(f"❌ Your key has expired. Expiry date: {get_key_expiry_date(user_key)}")
+    exit()
 
-# ✅ Create user folder and created.txt
+user_data = get_user_data(user_key)
+
+if not user_data.get("used"):
+    activate_key(user_key, chat_id, bot_token)
+
+# 🗂 Folder and logging setup
 import os
 from datetime import datetime
 
-FOLDER_NAME = f"bots/{TELEGRAM_CHAT_ID}"
-if not os.path.exists(FOLDER_NAME):
-    os.makedirs(FOLDER_NAME)
-    with open(os.path.join(FOLDER_NAME, "created.txt"), "w") as f:
-        f.write(datetime.now().isoformat())
+FOLDER = f"bots/{chat_id}"
+os.makedirs(FOLDER, exist_ok=True)
+with open(os.path.join(FOLDER, "created.txt"), "w") as f:
+    f.write(datetime.now().isoformat())
 
-# ✅ Logging Setup (after folder creation)
+# 📝 Logging
 import logging
 from logging.handlers import RotatingFileHandler
 
-log_file_path = os.path.join(FOLDER_NAME, "logs.txt")
-log_handler = RotatingFileHandler(log_file_path, maxBytes=100 * 1024, backupCount=1)
-log_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-log_handler.setFormatter(log_formatter)
+log_file = os.path.join(FOLDER, "logs.txt")
+handler = RotatingFileHandler(log_file, maxBytes=100000, backupCount=1)
+formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+handler.setFormatter(formatter)
 
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=[log_handler, logging.StreamHandler()]
-)
+logging.basicConfig(level=logging.INFO, handlers=[handler, logging.StreamHandler()])
 log = logging.getLogger()
 
-# ⌛ Expiry system for bot
-import requests
+# 🕓 Check expiry again
 from expiry_manager import is_expired, get_expiry_date
-expiry = get_expiry_date()
-if not expiry or is_expired(expiry):
+if is_expired(get_expiry_date()):
     log.error("❌ Bot expired. Please renew your subscription.")
     exit()
 
-# 🧠 Bot core logic imports
-from utils import (
-    fetch_ohlcv, detect_rotating_sector,
-    detect_market_cap_rotation
-)
-from evaluate import evaluate_coin
-from config import get_all_spot_symbols
-from filters import is_valid_symbol, has_already_sent, mark_sent
-
-# 📤 Telegram message sender
-def send_telegram_message(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message,
-        "parse_mode": "Markdown"
-    }
+# 📤 Send activation message
+def send_telegram(msg):
     try:
-        response = requests.post(url, json=payload)
-        if response.status_code != 200:
-            log.error(f"Telegram error: {response.text}")
+        r = requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", json={
+            "chat_id": chat_id, "text": msg, "parse_mode": "Markdown"
+        })
+        if r.status_code != 200:
+            log.error(f"Telegram error: {r.text}")
     except Exception as e:
         log.error(f"Telegram send failed: {e}")
 
-# 🔔 Confirmation message after activation
-send_telegram_message("✅ Bot activated successfully!\nNow scanning for trade setups...")
+send_telegram("✅ Bot activated successfully!\nNow scanning for trade setups...")
 
-# 🔁 Main trading loop
+# ♻ Bot core
 import time
+from utils import fetch_ohlcv, detect_rotating_sector, detect_market_cap_rotation
+from evaluate import evaluate_coin
+from config import get_all_spot_symbols
+from filters import is_valid_symbol, has_already_sent, mark_sent
 
 def main():
     while True:
@@ -131,18 +113,17 @@ def main():
         cap = detect_market_cap_rotation()
         btc_df = fetch_ohlcv("BTC/USDT", '4h', 100)
 
-        all_symbols = get_all_spot_symbols()
-
-        for symbol in all_symbols:
+        symbols = get_all_spot_symbols()
+        for symbol in symbols:
             if not is_valid_symbol(symbol):
                 continue
-            if has_already_sent(symbol, TELEGRAM_CHAT_ID):
+            if has_already_sent(symbol, chat_id):
                 continue
 
             msg = evaluate_coin(symbol, btc_df, sector, sector_coins, cap)
             if msg:
-                send_telegram_message(msg)
-                mark_sent(symbol, TELEGRAM_CHAT_ID)
+                send_telegram(msg)
+                mark_sent(symbol, chat_id)
                 log.info(f"✅ Signal sent: {symbol}")
                 time.sleep(2)
             else:
